@@ -29,4 +29,5 @@ Make sure you have **Python 3.11** installed on your system.
 ### Installation / التثبيت
 1. Clone this repository / قم بنسخ المستودع:
    ```bash
-   git clone [https://github.com/YOUR_USERNAME/PLC-Math-Logic-Studio-Pro.git](https://github.com/YOUR_USERNAME/PLC-Math-Logic-Studio-Pro.git)
+
+https://github.com/BTElctro/PLC-Math-Logic.git
