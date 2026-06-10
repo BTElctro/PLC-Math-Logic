@@ -1,827 +1,539 @@
-# PLC Math & Logic Studio - Android Edition
-# Same core engine, KivyMD UI for Android
+import ast
+import json
+import os
+import datetime
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+import customtkinter as ctk
+from PIL import ImageGrab
 
-import ast, json, os, math, datetime, re, tempfile
-from kivy.clock import Clock
-from kivy.core.window import Window
-from kivy.graphics import Color, Rectangle, Line, Ellipse
-from kivy.graphics.instructions import PushMatrix, PopMatrix, Translate
-from kivy.metrics import dp, sp
-from kivy.utils import get_color_from_hex, platform
-from kivy.uix.widget import Widget
-from kivy.uix.scrollview import ScrollView
-from kivy.uix.boxlayout import BoxLayout
-from kivy.animation import Animation
+# استيراد مكتبات توليد الـ PDF الاحترافية
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-from kivymd.app import MDApp
-from kivymd.uix.button import MDRaisedButton, MDFlatButton, MDIconButton
-from kivymd.uix.textfield import MDTextField
-from kivymd.uix.label import MDLabel
-from kivymd.uix.dialog import MDDialog
-from kivymd.uix.menu import MDDropdownMenu
-from kivymd.uix.snackbar import MDSnackbar, MDSnackbarSupportingText
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.gridlayout import MDGridLayout
-from kivymd.uix.scrollview import MDScrollView
-from kivymd.uix.toolbar import MDTopAppBar
-from kivymd.uix.card import MDCard
-
-try:
-    from PIL import ImageGrab, Image
-except ImportError:
-    ImageGrab = None
-    try:
-        from PIL import Image
-    except ImportError:
-        Image = None
-
-try:
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage
-except ImportError:
-    SimpleDocTemplate = None
-
-# ─── i18n System ───────────────────────────────
+# ==========================================
+# 0. نظام اللغات والترجمة الدولي (i18n System)
+# ==========================================
 languages = {
-    "English": {
-        "app_title": "PLC Logic Studio",
-        "templates": "Templates:",
-        "choose_template": "Choose Template",
-        "btn_save": "Save",
-        "btn_delete": "Delete",
-        "btn_guide": "Guide",
-        "btn_shot": "Screenshot",
-        "btn_pdf": "PDF",
+    "English 🇬🇧": {
+        "app_title": "PLC Math & Logic Studio Pro",
+        "templates": "Engineering Templates:",
+        "choose_template": "--- Choose Template ---",
+        "btn_save": "💾 Save",
+        "btn_delete": "🗑️ Delete",
+        "btn_guide": "📚 Block Guide",
+        "btn_shot": "📷 Screenshot",
+        "btn_pdf": "📄 Save PDF",
         "equation": "Equation / Logic:",
-        "btn_draw": "Draw Blocks",
-        "btn_preview": "Preview ST",
-        "guide_title": "Block Guide",
-        "warn_eq": "Enter equation first.",
-        "shot_success": "Saved: {path}",
-        "pdf_success": "PDF saved: {path}",
-        "st_copied": "ST code copied.",
-        "tpl_saved": "Template '{name}' saved.",
-        "tpl_overwrite": "Overwrite '{name}'?",
-        "tpl_core_warn": "Cannot delete built-in templates.",
-        "tpl_delete_confirm": "Delete '{name}'?",
-        "tpl_deleted": "Template deleted.",
-        "err_invalid_eq": "Use: OUTPUT = EXPRESSION",
-        "err_multi_eq": "Only one '=' allowed.",
-        "err_empty_lhs": "Output name empty.",
-        "err_empty_rhs": "Expression empty.",
-        "err_syntax": "Syntax error.",
-        "err_file": "Error: {err}",
-        "lets_make": "Let's make something!",
+        "btn_draw": "▶ Draw Blocks (Enter)",
+        "btn_preview": "</> Preview & Copy ST",
+        "guide_title": "Block Explanations",
+        "warn_eq": "Please enter an equation.",
+        "shot_success": "Screenshot saved successfully as:\n",
+        "pdf_success": "PDF Report generated successfully as:\n",
         "blocks_info": {
             "ADD": "Addition (+)", "SUB": "Subtraction (-)", "MUL": "Multiplication (*)",
-            "DIV": "Division (/)", "EXPT": "Exponent (**)", "GT": "Greater Than (>)",
+            "DIV": "Division (/)", "EXPT": "Exponent / Power (**)", "GT": "Greater Than (>)",
             "LT": "Less Than (<)", "GE": "Greater or Equal (>=)", "LE": "Less or Equal (<=)",
-            "EQ": "Equal (==)", "NE": "Not Equal (!=)", "AND": "Logical AND",
-            "OR": "Logical OR", "NOT": "Logical NOT", "SQRT": "Square Root",
-            "ABS": "Absolute Value", "SIN": "Sine", "COS": "Cosine",
-            "TAN": "Tangent", "EXP": "Exponential", "LOG": "Natural Log"
+            "EQ": "Equal (==)", "AND": "Logical AND", "OR": "Logical OR", "SQRT": "Square Root"
         }
     },
-    "العربية": {
-        "app_title": "استوديو PLC",
-        "templates": ":القوالب",
-        "choose_template": "اختر قالباً",
-        "btn_save": "حفظ",
-        "btn_delete": "حذف",
-        "btn_guide": "دليل",
-        "btn_shot": "لقطة",
-        "btn_pdf": "PDF",
-        "equation": ":المعادلة",
-        "btn_draw": "ارسم البلوكات",
-        "btn_preview": "معاينة ST",
-        "guide_title": "دليل البلوكات",
-        "warn_eq": "أدخل معادلة أولاً.",
-        "shot_success": "حُفظ: {path}",
-        "pdf_success": "PDF حُفظ: {path}",
-        "st_copied": "تم نسخ كود ST.",
-        "tpl_saved": "'{name}' حُفظ القالب",
-        "tpl_overwrite": "؟ '{name}' هل استبدال",
-        "tpl_core_warn": "لا يمكن حذف القوالب الأساسية.",
-        "tpl_delete_confirm": "؟ '{name}' حذف",
-        "tpl_deleted": "حُذف القالب.",
-        "err_invalid_eq": "استخدم: OUTPUT = EXPRESSION",
-        "err_multi_eq": "علامة = واحدة فقط مسموحة.",
-        "err_empty_lhs": "اسم المخرج فارغ.",
-        "err_empty_rhs": "التعبير فارغ.",
-        "err_syntax": "خطأ في الصياغة.",
-        "err_file": "خطأ: {err}",
-        "lets_make": "لنبدع!",
+    "العربية 🇸🇦": {
+        "app_title": "استوديو هندسة الـ PLC",
+        "templates": ":القوالب الهندسية",
+        "choose_template": "--- اختر قالباً جاهزاً ---",
+        "btn_save": "💾 حفظ",
+        "btn_delete": "🗑️ حذف",
+        "btn_guide": "📚 دليل البلوكات",
+        "btn_shot": "📷 لقطة شاشة",
+        "btn_pdf": "📄 حفظ كـ PDF",
+        "equation": ":المعادلة / المنطق",
+        "btn_draw": "▶ رسم البلوكات (Enter)",
+        "btn_preview": "</> معاينة ونسخ الكود",
+        "guide_title": "شرح البلوكات ومعانيها",
+        "warn_eq": "الرجاء إدخال معادلة أولاً.",
+        "shot_success": "تم حفظ لقطة الشاشة بنجاح باسم:\n",
+        "pdf_success": "تم إنشاء تقرير PDF بنجاح باسم:\n",
         "blocks_info": {
             "ADD": "الجمع (+)", "SUB": "الطرح (-)", "MUL": "الضرب (*)",
-            "DIV": "القسمة (/)", "EXPT": "الأس (**)", "GT": "أكبر من (>)",
-            "LT": "أصغر من (<)", "GE": "أكبر أو يساوي (>=)", "LE": "أصغر أو يساوي (<=)",
-            "EQ": "يساوي (==)", "NE": "لا يساوي (!=)", "AND": "بوابة وَ",
-            "OR": "بوابة أو", "NOT": "نفي", "SQRT": "جذر تربيعي",
-            "ABS": "قيمة مطلقة", "SIN": "جا", "COS": "جتا",
-            "TAN": "ظا", "EXP": "أسي", "LOG": "لوغاريتم"
+            "DIV": "القسمة (/)", "EXPT": "الأسس / القوة (**)", "GT": "أكبر من (>)",
+            "LT": "أصغر من (<)", "GE": "أكبر من أو يساوي (>=)", "LE": "أصغر من أو يساوي (<=)",
+            "EQ": "يساوي (==)", "AND": "بوابة (وَ) المنطقية", "OR": "بوابة (أو) المنطقية", "SQRT": "الجذر التربيعي"
         }
     },
-    "Francais": {
-        "app_title": "Studio PLC",
-        "templates": "Modeles:",
-        "choose_template": "Choisir modele",
-        "btn_save": "Sauver",
-        "btn_delete": "Suppr.",
-        "btn_guide": "Guide",
-        "btn_shot": "Capture",
-        "btn_pdf": "PDF",
-        "equation": "Equation:",
-        "btn_draw": "Dessiner",
-        "btn_preview": "Apercu ST",
-        "guide_title": "Guide des Blocs",
-        "warn_eq": "Entrez une equation.",
-        "shot_success": "Sauve: {path}",
-        "pdf_success": "PDF sauve: {path}",
-        "st_copied": "Code ST copie.",
-        "tpl_saved": "Modele '{name}' sauve.",
-        "tpl_overwrite": "Ecraser '{name}'?",
-        "tpl_core_warn": "Modeles de base proteges.",
-        "tpl_delete_confirm": "Supprimer '{name}'?",
-        "tpl_deleted": "Modele supprime.",
-        "err_invalid_eq": "Utilisez: SORTIE = EXPRESSION",
-        "err_multi_eq": "Un seul '=' autorise.",
-        "err_empty_lhs": "Nom de sortie vide.",
-        "err_empty_rhs": "Expression vide.",
-        "err_syntax": "Erreur de syntaxe.",
-        "err_file": "Erreur: {err}",
-        "lets_make": "Creons quelque chose!",
+    "Français 🇫🇷": {
+        "app_title": "Studio Logique PLC",
+        "templates": "Modèles d'ingénierie:",
+        "choose_template": "--- Choisir un modèle ---",
+        "btn_save": "💾 Enregistrer",
+        "btn_delete": "🗑️ Supprimer",
+        "btn_guide": "📚 Guide des Blocs",
+        "btn_shot": "📷 Capture",
+        "btn_pdf": "📄 Sauver PDF",
+        "equation": "Équation / Logique:",
+        "btn_draw": "▶ Dessiner (Enter)",
+        "btn_preview": "</> Aperçu & Copier",
+        "guide_title": "Explication des Blocs",
+        "warn_eq": "Veuillez entrer une équation.",
+        "shot_success": "Capture d'écran enregistrée avec succès sous:\n",
+        "pdf_success": "Rapport PDF généré avec succès sous:\n",
         "blocks_info": {
             "ADD": "Addition (+)", "SUB": "Soustraction (-)", "MUL": "Multiplication (*)",
             "DIV": "Division (/)", "EXPT": "Exposant (**)", "GT": "Plus grand que (>)",
-            "LT": "Plus petit que (<)", "GE": "Plus grand ou egal (>=)", "LE": "Plus petit ou egal (<=)",
-            "EQ": "Egal (==)", "NE": "Different (!=)", "AND": "ET Logique",
-            "OR": "OU Logique", "NOT": "NON", "SQRT": "Racine carree",
-            "ABS": "Valeur absolue", "SIN": "Sinus", "COS": "Cosinus",
-            "TAN": "Tangente", "EXP": "Exponentielle", "LOG": "Log naturel"
+            "LT": "Plus petit que (<)", "GE": "Plus grand ou égal (>=)", "LE": "Plus petit ou égal (<=)",
+            "EQ": "Égal (==)", "AND": "ET Logique", "OR": "OU Logique", "SQRT": "Racine carrée"
         }
     }
 }
-current_lang = "English"
+current_lang = "English 🇬🇧"
 
-# ─── Template System ────────────────────────────
+# ==========================================
+# 1. نظام إدارة القوالب (JSON)
+# ==========================================
 DB_FILE = "plc_templates.json"
 default_templates = {
-    "Tank Volume": "VOLUME = PI * (RADIUS ** 2) * HEIGHT",
-    "Analog Scaling": "SCALED = ((RAW - MINRAW) / (MAXRAW - MINRAW)) * (MAXSCALE - MINSCALE) + MINSCALE",
-    "Pump Interlock": "PUMP_RUN = (LEVEL > 20) and (PRESSURE < 5) and (TEMP < 80)",
-    "Flow Rate": "FLOW = PI * ((DIA / 2) ** 2) * VELOCITY",
-    "Hydraulic HP": "HP = (FLOW_GPM * PRESSURE_PSI) / 1714",
-    "C to Fahrenheit": "TEMP_F = (TEMP_C * 1.8) + 32",
-    "Newton 2nd Law": "FORCE = MASS * ACCEL",
-    "PID Error": "ERROR = SETPOINT - PV"
+    "1. Tank Volume (Cylinder)": "VOLUME = 3.1415 * (RADIUS ** 2) * HEIGHT",
+    "2. Spherical Tank Volume": "VOLUME = (4 / 3) * 3.1415 * (RADIUS ** 3)",
+    "3. Analog Input Scaling": "SCALEDVAL = ((RAW - MINRAW) / (MAXRAW - MINRAW)) * (MAXSCALE - MINSCALE) + MINSCALE",
+    "4. Pump Interlock Safety": "PUMP_RUN = (LEVEL > 20) and (PRESSURE < 5)",
+    "5. Liquid Flow Rate (Pipe)": "FLOW_RATE = 3.1415 * ((DIAMETER / 2) ** 2) * VELOCITY",
+    "6. Hydraulic Pump Horsepower": "HP = (FLOW_GPM * PRESSURE_PSI) / 1714",
+    "7. Celsius to Fahrenheit": "TEMP_F = (TEMP_C * 1.8) + 32"
 }
 
 def load_templates():
     if os.path.exists(DB_FILE):
         try:
-            with open(DB_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict) and data:
-                    return data
-        except Exception:
-            pass
-    try:
-        with open(DB_FILE, "w", encoding="utf-8") as f:
-            json.dump(default_templates, f, indent=4)
-    except Exception:
-        pass
-    return default_templates.copy()
+            with open(DB_FILE, "r", encoding="utf-8") as file: return json.load(file)
+        except Exception: return default_templates.copy()
+    else:
+        with open(DB_FILE, "w", encoding="utf-8") as file: json.dump(default_templates, file, indent=4)
+        return default_templates.copy()
 
-def save_templates(tdict):
-    try:
-        with open(DB_FILE, "w", encoding="utf-8") as f:
-            json.dump(tdict, f, indent=4)
-        return True
-    except Exception:
-        return False
+def save_templates_to_file(templates_dict):
+    with open(DB_FILE, "w", encoding="utf-8") as file: json.dump(templates_dict, file, indent=4)
 
 templates_db = load_templates()
 
-# ─── AST Engine ─────────────────────────────────
-CONSTANTS = {"PI": math.pi, "E": math.e, "TAU": math.tau}
-ALLOWED_FUNCS = {"SQRT": math.sqrt, "ABS": abs, "SIN": math.sin, "COS": math.cos,
-    "TAN": math.tan, "EXP": math.exp, "LOG": math.log, "LN": math.log,
-    "ROUND": round, "MIN": min, "MAX": max}
+# ==========================================
+# 2. محرك التحليل الهندسي والرسم
+# ==========================================
+ctk.set_appearance_mode("Dark")
+ctk.set_default_color_theme("blue")
 
 class BlockGenerator:
     def __init__(self):
-        self.blocks = []
-        self.temp_count = 0
+        self.blocks = []; self.temp_count = 0
         self.op_map = {
-            ast.Add: "ADD", ast.Sub: "SUB", ast.Mult: "MUL", ast.Div: "DIV",
-            ast.Pow: "EXPT", ast.Mod: "MOD", ast.FloorDiv: "FDIV",
-            ast.Gt: "GT", ast.Lt: "LT", ast.GtE: "GE", ast.LtE: "LE",
-            ast.Eq: "EQ", ast.NotEq: "NE",
-            ast.And: "AND", ast.Or: "OR"
+            ast.Add: 'ADD', ast.Sub: 'SUB', ast.Mult: 'MUL', ast.Div: 'DIV', ast.Pow: 'EXPT', 
+            ast.Gt: 'GT', ast.Lt: 'LT', ast.GtE: 'GE', ast.LtE: 'LE', ast.Eq: 'EQ', 
+            ast.NotEq: 'NE', ast.And: 'AND', ast.Or: 'OR'
         }
-    def new_wire(self):
-        self.temp_count += 1
-        return f"W_{self.temp_count}"
-    def add_block(self, op, in1, in2, out):
-        self.blocks.append({"op": op, "in1": in1, "in2": in2, "out": out})
-        return out
     def parse_expression(self, node):
-        if isinstance(node, ast.Name):
-            nm = node.id.upper()
-            return str(CONSTANTS[nm]) if nm in CONSTANTS else nm
-        if isinstance(node, ast.Constant):
-            if isinstance(node.value, (int, float)):
-                return str(node.value)
-            raise ValueError(f"Bad const: {type(node.value).__name__}")
-        if isinstance(node, ast.UnaryOp):
-            op = self.parse_expression(node.operand)
-            out = self.new_wire()
-            if isinstance(node.op, ast.USub):
-                return self.add_block("MUL", op, "-1", out)
-            if isinstance(node.op, ast.UAdd):
-                return op
-        if isinstance(node, ast.BinOp):
-            l = self.parse_expression(node.left)
-            r = self.parse_expression(node.right)
-            op = self.op_map.get(type(node.op))
-            if not op: raise ValueError(f"Bad binary: {type(node.op).__name__}")
-            return self.add_block(op, l, r, self.new_wire())
-        if isinstance(node, ast.BoolOp):
-            op = self.op_map.get(type(node.op))
-            if not op: raise ValueError(f"Bad bool: {type(node.op).__name__}")
-            r = self.parse_expression(node.values[0])
-            for v in node.values[1:]:
-                r = self.add_block(op, r, self.parse_expression(v), self.new_wire())
-            return r
-        if isinstance(node, ast.Compare):
-            l = self.parse_expression(node.left)
-            for op_node, comp in zip(node.ops, node.comparators):
-                op = self.op_map.get(type(op_node))
-                if not op: raise ValueError(f"Bad cmp: {type(op_node).__name__}")
-                r = self.parse_expression(comp)
-                l = self.add_block(op, l, r, self.new_wire())
-            return l
-        if isinstance(node, ast.Call):
-            if not isinstance(node.func, ast.Name):
-                raise ValueError("Simple func names only")
-            fn = node.func.id.upper()
-            if len(node.args) < 1: raise ValueError(f"{fn}() needs arg")
-            if len(node.args) > 1: raise ValueError(f"{fn} takes 1 arg, got {len(node.args)}")
-            if fn not in ALLOWED_FUNCS: raise ValueError(f"Unknown: {fn}")
-            return self.add_block(fn, self.parse_expression(node.args[0]), "---", self.new_wire())
-        raise ValueError(f"Unsupported: {type(node).__name__}")
+        if isinstance(node, ast.Name): return node.id.upper()
+        elif isinstance(node, ast.Constant): return str(node.value)
+        elif isinstance(node, ast.BinOp):
+            left, right = self.parse_expression(node.left), self.parse_expression(node.right)
+            op_name = self.op_map.get(type(node.op), 'UNKNOWN')
+            self.temp_count += 1; out_var = f"WIRE_{self.temp_count}"
+            self.blocks.append({'op': op_name, 'in1': left, 'in2': right, 'out': out_var})
+            return out_var
+        elif isinstance(node, ast.Compare):
+            left, right = self.parse_expression(node.left), self.parse_expression(node.comparators[0])
+            op_name = self.op_map.get(type(node.ops[0]), 'UNKNOWN')
+            self.temp_count += 1; out_var = f"WIRE_{self.temp_count}"
+            self.blocks.append({'op': op_name, 'in1': left, 'in2': right, 'out': out_var})
+            return out_var
+        elif isinstance(node, ast.BoolOp):
+            left, right = self.parse_expression(node.values[0]), self.parse_expression(node.values[1])
+            op_name = self.op_map.get(type(node.op), 'UNKNOWN')
+            self.temp_count += 1; out_var = f"WIRE_{self.temp_count}"
+            self.blocks.append({'op': op_name, 'in1': left, 'in2': right, 'out': out_var})
+            return out_var
+        elif isinstance(node, ast.Call):
+            func_name = node.func.id.upper()
+            arg = self.parse_expression(node.args[0])
+            self.temp_count += 1; out_var = f"WIRE_{self.temp_count}"
+            self.blocks.append({'op': func_name, 'in1': arg, 'in2': '---', 'out': out_var})
+            return out_var
+        return "ERR"
 
 def process_equation(equation_str):
-    if "=" not in equation_str: return None, "err_invalid_eq"
-    if equation_str.count("=") > 1: return None, "err_multi_eq"
-    out_var, expr = equation_str.split("=", 1)
-    out_var = out_var.strip().upper()
-    expr = expr.strip()
-    if not out_var: return None, "err_empty_lhs"
-    if not expr: return None, "err_empty_rhs"
-    expr_norm = expr.replace(" AND ", " and ").replace(" OR ", " or ")
     try:
-        tree = ast.parse(expr_norm, mode="eval")
-    except SyntaxError: return None, "err_syntax"
+        out_var, expr = equation_str.split('=')
+        out_var = out_var.strip().upper()
+        expr = expr.strip()
+        expr_for_ast = expr.replace(" AND ", " and ").replace(" OR ", " or ")
+    except ValueError: return None, "Error: Use format (Output = Expression)"
     try:
-        gen = BlockGenerator()
-        result = gen.parse_expression(tree.body)
-        if gen.blocks: gen.blocks[-1]["out"] = out_var
-        return gen.blocks, None
-    except ValueError as e:
-        return None, str(e)
-    except Exception as e:
-        return None, f"err_syntax ({e})"
+        parsed_expr = ast.parse(expr_for_ast, mode='eval')
+        generator = BlockGenerator()
+        generator.parse_expression(parsed_expr.body)
+        if generator.blocks: generator.blocks[-1]['out'] = out_var
+        return generator.blocks, None
+    except SyntaxError: return None, "Error: Invalid Math Syntax"
 
-# ─── Block Drawing Helpers ──────────────────────
-BLOCK_COLORS_DARK = {
-    "LOGIC": ("#198754", "#146c43", "white"),
-    "MATH": ("#0d6efd", "#0a58ca", "white"),
-    "FUNC": ("#6f42c1", "#59359a", "white"),
-}
-BLOCK_COLORS_LIGHT = {
-    "LOGIC": ("#D4EDDA", "#155724", "black"),
-    "MATH": ("#CCE5FF", "#004085", "black"),
-    "FUNC": ("#E2D9F3", "#381861", "black"),
-}
-LOGIC_OPS = {"AND","OR","NOT","GT","LT","GE","LE","EQ","NE"}
-MATH_OPS = {"ADD","SUB","MUL","DIV","EXPT","MOD","FDIV"}
+def draw_grid(canvas, is_dark):
+    grid_color = "#2E3440" if is_dark else "#E9ECEF"
+    for i in range(0, 4000, 25): canvas.create_line([(i, 0), (i, 2000)], tag='grid_line', fill=grid_color, dash=(2, 2))
+    for i in range(0, 2000, 25): canvas.create_line([(0, i), (4000, i)], tag='grid_line', fill=grid_color, dash=(2, 2))
 
 def get_block_colors(op_name, is_dark):
-    pal = BLOCK_COLORS_DARK if is_dark else BLOCK_COLORS_LIGHT
-    if op_name in LOGIC_OPS: return pal["LOGIC"]
-    if op_name in MATH_OPS: return pal["MATH"]
-    return pal["FUNC"]
+    if is_dark:
+        if op_name in ['AND','OR','GT','LT','GE','LE','EQ','NE']: return {"fill": "#198754", "outline": "#146c43", "text": "white"}
+        elif op_name in ['ADD','SUB','MUL','DIV','EXPT']: return {"fill": "#0d6efd", "outline": "#0a58ca", "text": "white"}
+        else: return {"fill": "#6f42c1", "outline": "#59359a", "text": "white"}
+    else:
+        if op_name in ['AND','OR','GT','LT','GE','LE','EQ','NE']: return {"fill": "#D4EDDA", "outline": "#155724", "text": "black"}
+        elif op_name in ['ADD','SUB','MUL','DIV','EXPT']: return {"fill": "#CCE5FF", "outline": "#004085", "text": "black"}
+        else: return {"fill": "#E2D9F3", "outline": "#381861", "text": "black"}
 
-# ─── FBD Canvas Widget ──────────────────────────
-class FBDCanvas(Widget):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.blocks = []
-        self.is_dark = True
-        self.wire_color = "#A6ACCD"
-        self.text_color = "#FFFFFF"
-        self.bg_color = "#1E1E1E"
-        self.block_w = 130
-        self.block_h = 75
-        self.spacing_x = 420
-        self.start_x = 150
-        self.start_y = 50
+def draw_blocks(event=None):
+    equation = entry_equation.get()
+    if not equation.strip():
+        if event is None: messagebox.showwarning("Warning", languages[current_lang]["warn_eq"])
+        return
+    blocks, error = process_equation(equation)
+    if error:
+        messagebox.showerror("Error", error)
+        return
 
-    def draw(self, blocks, is_dark):
-        self.blocks = blocks
-        self.is_dark = is_dark
-        if is_dark:
-            self.bg_color = "#1E1E1E"
-            self.wire_color = "#A6ACCD"
-            self.text_color = "#FFFFFF"
-        else:
-            self.bg_color = "#FFFFFF"
-            self.wire_color = "#495057"
-            self.text_color = "#212529"
+    canvas.delete("all")
+    is_dark = ctk.get_appearance_mode() == "Dark"
+    bg_color, wire_color, text_color, shadow_color = ("#1E1E1E", "#A6ACCD", "#FFFFFF", "#111111") if is_dark else ("#FFFFFF", "#495057", "#212529", "#DEE2E6")
+    canvas.config(bg=bg_color)
+    draw_grid(canvas, is_dark)
+    
+    start_x, start_y, block_w, block_h, spacing_x = 150, 180, 130, 75, 420             
 
-        total_w = self.start_x + len(blocks) * self.spacing_x + 300
-        total_h = self.start_y + self.block_h + 200
-        self.size = (max(total_w, dp(360)), max(total_h, dp(200)))
-        self.canvas.clear()
-        self._draw_grid(total_w, total_h)
-        self._draw_blocks()
+    for index, block in enumerate(blocks):
+        x, y = start_x + (index * spacing_x), start_y
+        colors = get_block_colors(block['op'], is_dark)
+        canvas.create_rectangle(x+5, y+5, x + block_w + 5, y + block_h + 5, fill=shadow_color, outline="")
+        canvas.create_rectangle(x, y, x + block_w, y + block_h, fill=colors["fill"], outline=colors["outline"], width=2)
+        canvas.create_text(x + (block_w/2), y + (block_h/2), text=block['op'], font=("Segoe UI", 14, "bold"), fill=colors["text"])
 
-    def _draw_grid(self, total_w, total_h):
-        with self.canvas:
-            Color(*get_color_from_hex(self.bg_color))
-            Rectangle(pos=(0, 0), size=self.size)
-            Color(*get_color_from_hex("#2E3440" if self.is_dark else "#E9ECEF"))
-            for x in range(0, int(total_w) + 25, 25):
-                Line(points=[x, 0, x, total_h], width=0.5, dash_length=3, dash_offset=3)
-            for y in range(0, int(total_h) + 25, 25):
-                Line(points=[0, y, total_w, y], width=0.5, dash_length=3, dash_offset=3)
-
-    def _draw_blocks(self):
-        if not self.blocks:
-            return
-        # First pass: positions
-        op = {}  # out_name -> position (x, y)
-        blocks_xy = []
-        for idx, block in enumerate(self.blocks):
-            x = self.start_x + idx * self.spacing_x
-            y = self.start_y + self.block_h
-            blocks_xy.append((x, y))
-            out_x = x + self.block_w
-            out_y = y + self.block_h / 2
-            op[block["out"]] = (out_x, out_y)
-
-        # Draw wires first (on bottom layer)
-        self.canvas.add(Color(*get_color_from_hex(self.wire_color)))
-        wire_width = dp(2.2)
-        for idx, block in enumerate(self.blocks):
-            bx, by = blocks_xy[idx]
-            inp1_info = block["in1"]
-            inp2_info = block["in2"]
-            # Input 1
-            if inp1_info in op:
-                sx, sy = op[inp1_info]
-                dx, dy = bx, by + 25
-                mid = (sx + dx) // 2
-                self.canvas.add(Line(points=[sx, sy, mid, sy, mid, dy, dx, dy], width=wire_width))
-                self._arrow(dx, dy, 1, wire_width)
+        def draw_pin(pin_x, pin_y, text, is_out=False, pin_number=1):
+            line_len = 140 
+            line_start, line_end = (pin_x + block_w, pin_x + block_w + line_len) if is_out else (pin_x - line_len, pin_x)
+            canvas.create_line(line_start, pin_y, line_end, pin_y, arrow=tk.LAST, width=2.5, fill=wire_color)
+            node_x = pin_x + block_w if is_out else pin_x
+            canvas.create_oval(node_x-4, pin_y-4, node_x+4, pin_y+4, fill=bg_color, outline=colors["outline"], width=2)
+            
+            text_y = pin_y - 12
+            if is_out:
+                text_x = line_start + (line_len / 2); anchor = "s"; t_color = "#FF4C4C"; font_style = ("Segoe UI", 12, "bold")
             else:
-                self._stub(bx, by + 25, inp1_info, 1, wire_width)
-            # Input 2
-            if inp2_info != "---":
-                if inp2_info in op:
-                    sx, sy = op[inp2_info]
-                    dx, dy = bx, by + 50
-                    mid = (sx + dx) // 2
-                    self.canvas.add(Line(points=[sx, sy, mid, sy, mid, dy, dx, dy], width=wire_width))
-                    self._arrow(dx, dy, 1, wire_width)
+                text_x = line_start + (line_len / 2)
+                if pin_number == 1:
+                    text_y = pin_y - 10; anchor = "s"
                 else:
-                    self._stub(bx, by + 50, inp2_info, 2, wire_width)
+                    text_y = pin_y + 10; anchor = "n"
+                
+                if str(text).startswith("WIRE_"):
+                    t_color = "#7F8C8D" if is_dark else "#95A5A6"; font_style = ("Segoe UI", 11, "italic")
+                else:
+                    t_color = text_color; font_style = ("Segoe UI", 12, "normal")
 
-        # Draw blocks (on top layer)
-        for idx, block in enumerate(self.blocks):
-            bx, by = blocks_xy[idx]
-            fill, outline, txt = get_block_colors(block["op"], self.is_dark)
-            out_x = bx + self.block_w
-            out_y = by + self.block_h / 2
+            canvas.create_text(text_x, text_y, text=text, anchor=anchor, font=font_style, fill=t_color)
 
-            # Shadow
-            self.canvas.add(Color(*get_color_from_hex("#111111" if self.is_dark else "#DEE2E6")))
-            shadow = Rectangle(pos=(bx + 4, by + 4), size=(self.block_w, self.block_h))
-            self.canvas.add(shadow)
+        draw_pin(x, y + 25, block['in1'], is_out=False, pin_number=1)
+        if block['in2'] != '---': draw_pin(x, y + 50, block['in2'], is_out=False, pin_number=2)
+        draw_pin(x, y + 37.5, block['out'], is_out=True)
+        
+    canvas.config(scrollregion=canvas.bbox("all"))
 
-            # Block body
-            self.canvas.add(Color(*get_color_from_hex(fill)))
-            self.canvas.add(Rectangle(pos=(bx, by), size=(self.block_w, self.block_h)))
-            self.canvas.add(Color(*get_color_from_hex(outline)))
-            self.canvas.add(Line(rectangle=(bx, by, self.block_w, self.block_h), width=2))
+# ==========================================
+# 3. ميزة حفظ لقطات الشاشة والـ PDF
+# ==========================================
+def capture_canvas_image():
+    equation = entry_equation.get().strip()
+    root.update()
+    x = root.winfo_rootx() + canvas_frame.winfo_x()
+    y = root.winfo_rooty() + canvas_frame.winfo_y()
+    w = canvas_frame.winfo_width()
+    h = canvas_frame.winfo_height()
+    
+    clean_name = equation.split('=')[0].strip().upper() if '=' in equation else "FBD_Output"
+    filename = f"Capture_{clean_name}.png"
+    
+    img = ImageGrab.grab(bbox=(x, y, x + w, y + h))
+    img.save(filename)
+    return filename
 
-            # Block label
-            self._label(bx + self.block_w / 2, by + self.block_h / 2, block["op"], txt, 14, "bold", "center", "center")
+def take_canvas_screenshot():
+    equation = entry_equation.get().strip()
+    if not equation:
+        messagebox.showwarning("Warning", languages[current_lang]["warn_eq"])
+        return
+    filename = capture_canvas_image()
+    messagebox.showinfo("Screenshot", languages[current_lang]["shot_success"] + filename)
 
-            # Output
-            self.canvas.add(Color(*get_color_from_hex(self.bg_color)))
-            self.canvas.add(Ellipse(pos=(out_x - 5, out_y - 5), size=(10, 10)))
-            self.canvas.add(Color(*get_color_from_hex(outline)))
-            self.canvas.add(Line(circle=(out_x, out_y, 5), width=2))
-            self._label(out_x + 12, out_y - 14, block["out"], "#FF4C4C", 12, "bold", "left", "bottom")
+def export_to_pdf_report():
+    equation = entry_equation.get().strip()
+    if not equation:
+        messagebox.showwarning("Warning", languages[current_lang]["warn_eq"])
+        return
+        
+    temp_img_file = capture_canvas_image()
+    clean_name = equation.split('=')[0].strip().upper() if '=' in equation else "REPORT"
+    pdf_filename = f"Report_{clean_name}.pdf"
+    
+    doc = SimpleDocTemplate(pdf_filename, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+    story = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=22, spaceAfter=15, textColor='#0D6EFD')
+    meta_style = ParagraphStyle('MetaStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, spaceAfter=15, textColor='#555555')
+    eq_style = ParagraphStyle('EqStyle', parent=styles['Code'], fontName='Courier-Bold', fontSize=12, spaceAfter=25, textColor='#198754', wordWrap='LTR')
+    
+    story.append(Paragraph(f"PLC FBD GENERATOR REPORT: {clean_name}", title_style))
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    story.append(Paragraph(f"Generated on: {current_time} | System Status: OK", meta_style))
+    
+    story.append(Paragraph(f"<b>Target Logic Equation:</b> {equation.upper()}", eq_style))
+    story.append(Spacer(1, 15))
+    
+    try:
+        story.append(Paragraph("<b>Visual Function Block Diagram (FBD):</b>", styles['Normal']))
+        story.append(Spacer(1, 10))
+        story.append(Image(temp_img_file, width=530, height=260))
+    except Exception as e:
+        story.append(Paragraph(f"Error embedding diagram image: {str(e)}", styles['Normal']))
+        
+    doc.build(story)
+    messagebox.showinfo("PDF Export", languages[current_lang]["pdf_success"] + pdf_filename)
 
-    def _arrow(self, x, y, direction, width):
-        self.canvas.add(Color(*get_color_from_hex(self.wire_color)))
-        if direction > 0:
-            self.canvas.add(Line(points=[x, y, x - 8, y - 4, x - 8, y + 4], width=width, close=True))
-        else:
-            self.canvas.add(Line(points=[x, y, x + 8, y - 4, x + 8, y + 4], width=width, close=True))
+# ==========================================
+# 4. لوحة أزرار العمليات الحسابية والمنطقية
+# ==========================================
+def insert_operator(operator_str):
+    current_idx = entry_equation.index(tk.INSERT)
+    entry_equation.insert(current_idx, f" {operator_str} ")
+    entry_equation.focus()
 
-    def _stub(self, bx, by, text, pin_num, width):
-        stub_end = bx - 140
-        self.canvas.add(Color(*get_color_from_hex(self.wire_color)))
-        self.canvas.add(Line(points=[stub_end, by, bx, by], width=width))
-        self._arrow(bx, by, 1, width)
-        # Label
-        if text.startswith("W_") or text in CONSTANTS or text.replace(".","").replace("-","").isdigit():
-            c = "#7F8C8D" if self.is_dark else "#95A5A6"
-            f = 11
-            s = "italic"
-        else:
-            c = self.text_color
-            f = 12
-            s = "normal"
-        ly = by - 10 if pin_num == 1 else by + 10
-        self._label((stub_end + bx) // 2, ly, text, c, f, s, "center", "top" if pin_num == 1 else "bottom")
-        # Input pin
-        self.canvas.add(Color(*get_color_from_hex(self.bg_color)))
-        self.canvas.add(Ellipse(pos=(bx - 4, by - 4), size=(8, 8)))
-        colors = get_block_colors("ADD", self.is_dark)
-        self.canvas.add(Color(*get_color_from_hex(colors[1])))
-        self.canvas.add(Line(circle=(bx, by, 4), width=2))
+# ==========================================
+# 5. النوافذ المنبثقة وكود المعاينة
+# ==========================================
+def open_guide_dialog():
+    dialog = ctk.CTkToplevel(root); dialog.title(languages[current_lang]["guide_title"]); dialog.geometry("450x550")
+    dialog.transient(root); dialog.grab_set()
+    ctk.CTkLabel(dialog, text=languages[current_lang]["guide_title"], font=("Segoe UI", 18, "bold"), text_color="#0D6EFD").pack(pady=15)
+    scroll_frame = ctk.CTkScrollableFrame(dialog, width=400, height=450); scroll_frame.pack(padx=20, pady=10, fill="both", expand=True)
+    blocks_info = languages[current_lang]["blocks_info"]
+    for block_name, explanation in blocks_info.items():
+        row = ctk.CTkFrame(scroll_frame, fg_color="transparent"); row.pack(fill="x", pady=5)
+        ctk.CTkLabel(row, text=f"[{block_name}]", font=("Consolas", 14, "bold"), width=70, anchor="w", text_color="#198754").pack(side="left")
+        align = "e" if current_lang == "العربية 🇸🇦" else "w"
+        ctk.CTkLabel(row, text=explanation, font=("Segoe UI", 14), anchor=align).pack(side="right" if current_lang == "العربية 🇸🇦" else "left", fill="x", expand=True)
 
-    def _label(self, x, y, text, color, size, style, halign, valign):
-        from kivy.uix.label import Label
-        lbl = Label(text=text, font_size=sp(size), bold=("bold" in style),
-                    italic=("italic" in style), color=get_color_from_hex(color),
-                    halign=halign, valign=valign, size_hint=(None, None))
-        lbl.texture_update()
-        lbl.size = lbl.texture_size
-        if halign == "center": x -= lbl.width / 2
-        elif halign == "right": x -= lbl.width
-        if valign == "center": y -= lbl.height / 2
-        elif valign == "top": y -= lbl.height
-        lbl.pos = (x, y)
-        self.canvas.add(lbl)
+def open_data_type_dialog():
+    equation = entry_equation.get()
+    if not equation.strip(): 
+        messagebox.showwarning("Warning", languages[current_lang]["warn_eq"])
+        return
+    try:
+        output_var, expression = equation.split('=')
+        output_var = output_var.strip().upper(); expression = expression.strip().upper()
+        inputs = set()
+        parsed_expr = ast.parse(expression.replace(" AND ", " and ").replace(" OR ", " or "), mode='eval')
+        for node in ast.walk(parsed_expr):
+            if isinstance(node, ast.Name) and node.id.upper() not in ['SQRT', 'ABS', 'SIN', 'COS']: inputs.add(node.id.upper())
+    except Exception: return messagebox.showerror("Error", "Could not parse equation.")
 
-    def on_touch_down(self, touch):
-        return super().on_touch_down(touch)
+    dialog = ctk.CTkToplevel(root); dialog.title("Export ST Code Preview"); dialog.geometry("550x600")
+    dialog.transient(root); dialog.grab_set()
+    
+    ctk.CTkLabel(dialog, text="1. Variable Types:", font=("Segoe UI", 16, "bold")).pack(anchor="w", padx=20, pady=10)
+    frame_vars = ctk.CTkScrollableFrame(dialog, height=150); frame_vars.pack(fill="x", padx=20)
+    var_types = {}
 
-# ─── Main App ───────────────────────────────────
-class PLCStudioApp(MDApp):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.title = "PLC Logic Studio"
-        self.theme_cls.theme_style = "Dark"
-        self.theme_cls.primary_palette = "Blue"
-        self.theme_cls.material_style = "M3"
+    def update_preview(*args):
+        st_code = "FUNCTION_BLOCK Logic_Block\n\nVAR_INPUT\n"
+        for var in sorted(inputs): st_code += f"    {var} : {var_types[var].get()};\n"
+        st_code += "END_VAR\n\nVAR_OUTPUT\n"
+        st_code += f"    {output_var} : {var_types[output_var].get()};\n"
+        st_code += "END_VAR\n\n// The Logic\n"
+        st_code += f"{output_var} := {expression};\n\nEND_FUNCTION_BLOCK"
+        text_preview.configure(state="normal"); text_preview.delete("1.0", tk.END); text_preview.insert(tk.END, st_code)
+        text_preview.configure(state="disabled"); dialog.st_code_cache = st_code 
 
-    def build(self):
-        self.lang = languages[current_lang]
-        self.is_dark = True
-        self._build_ui()
-        return self.root
+    def add_row(parent, var_name, is_out=False):
+        row = ctk.CTkFrame(parent, fg_color="transparent"); row.pack(fill="x", pady=5)
+        ctk.CTkLabel(row, text=f"{var_name} (Out)" if is_out else var_name, width=150, anchor="w", font=("Segoe UI", 14)).pack(side="left")
+        default_type = "BOOL" if any(k in var_name.upper() for k in ['PUMP', 'RUN', 'CMD', 'STATUS']) else "REAL"
+        combo = ctk.CTkComboBox(row, values=["REAL", "INT", "BOOL", "DINT", "WORD"], width=120, command=update_preview)
+        combo.set(default_type); combo.pack(side="left"); var_types[var_name] = combo
 
-    def _build_ui(self):
-        from kivy.uix.screenmanager import ScreenManager, Screen
-        self.root = ScreenManager()
+    for var in sorted(inputs): add_row(frame_vars, var)
+    add_row(frame_vars, output_var, is_out=True)
 
-        main_screen = Screen(name="main")
+    ctk.CTkLabel(dialog, text="2. Live Code Preview:", font=("Segoe UI", 16, "bold")).pack(anchor="w", padx=20, pady=(20,10))
+    text_preview = ctk.CTkTextbox(dialog, height=200, font=("Consolas", 14), fg_color="#1E1E1E", text_color="#A6ACCD")
+    text_preview.pack(fill="both", expand=True, padx=20); update_preview()
 
-        layout = MDBoxLayout(orientation="vertical", spacing=dp(4), padding=[dp(8), dp(4), dp(8), dp(4)])
+    def copy_code():
+        root.clipboard_clear(); root.clipboard_append(dialog.st_code_cache)
+        messagebox.showinfo("Success", "ST Code copied to clipboard!"); dialog.destroy()
 
-        # ── Top Bar ──
-        top = MDBoxLayout(adaptive_height=True, spacing=dp(6))
+    ctk.CTkButton(dialog, text="Copy ST Code", font=("Segoe UI", 14, "bold"), fg_color="#198754", hover_color="#146c43", command=copy_code).pack(pady=20)
 
-        self.theme_btn = MDIconButton(icon="weather-sunny", on_release=self.toggle_theme)
-        top.add_widget(self.theme_btn)
+# ==========================================
+# 6. دوال الواجهة والتحكم
+# ==========================================
+def update_ui_language(*args):
+    global current_lang
+    current_lang = lang_var.get(); lang_dict = languages[current_lang]
+    root.title(lang_dict["app_title"])
+    lbl_templates.configure(text=lang_dict["templates"])
+    combo_templates.set(lang_dict["choose_template"])
+    btn_save.configure(text=lang_dict["btn_save"])
+    btn_delete.configure(text=lang_dict["btn_delete"])
+    btn_guide.configure(text=lang_dict["btn_guide"])
+    btn_shot.configure(text=lang_dict["btn_shot"])
+    btn_pdf.configure(text=lang_dict["btn_pdf"])
+    lbl_eq.configure(text=lang_dict["equation"])
+    btn_draw.configure(text=lang_dict["btn_draw"])
+    btn_preview.configure(text=lang_dict["btn_preview"])
 
-        lang_btn = MDFlatButton(text="EN", on_release=self.open_lang_menu)
-        self.lang_btn = lang_btn
-        top.add_widget(lang_btn)
-        self.lang_menu = None
+def toggle_theme():
+    ctk.set_appearance_mode("Light" if ctk.get_appearance_mode() == "Dark" else "Dark")
+    if entry_equation.get().strip(): draw_blocks(event="theme")
+    else: canvas.delete("all"); draw_grid(canvas, ctk.get_appearance_mode() == "Dark")
 
-        for text, cmd in [("Guide", self.open_guide), ("Screenshot", self.take_shot), ("PDF", self.make_pdf)]:
-            b = MDFlatButton(text=text, on_release=cmd)
-            setattr(self, f"btn_{text.lower()}", b)
-            top.add_widget(b)
+def on_template_select(choice):
+    if choice in templates_db:
+        entry_equation.delete(0, tk.END); entry_equation.insert(0, templates_db[choice]); draw_blocks()
 
-        layout.add_widget(top)
+def save_custom_template():
+    current_eq = entry_equation.get().strip()
+    if "=" not in current_eq: return messagebox.showerror("Error", "Please enter a valid equation.")
+    template_name = simpledialog.askstring("Save Template", "Enter template name:", parent=root)
+    if template_name:
+        templates_db[template_name] = current_eq; save_templates_to_file(templates_db)
+        combo_templates.configure(values=list(templates_db.keys())); combo_templates.set(template_name)
+        messagebox.showinfo("Success", f"Template '{template_name}' saved!")
 
-        # ── Templates ──
-        tpl_row = MDBoxLayout(adaptive_height=True, spacing=dp(4))
+def delete_custom_template():
+    selected = combo_templates.get()
+    if selected in default_templates: return messagebox.showwarning("Warning", "Cannot delete core engineering templates.")
+    if selected not in templates_db: return
+    confirm = messagebox.askyesno("Confirm", f"Delete template '{selected}'?")
+    if confirm:
+        del templates_db[selected]; save_templates_to_file(templates_db)
+        combo_templates.configure(values=list(templates_db.keys()))
+        combo_templates.set("--- Choose Template ---")
+        entry_equation.delete(0, tk.END); canvas.delete("all")
+        draw_grid(canvas, ctk.get_appearance_mode() == "Dark")
 
-        self.tpl_label = MDLabel(text=self.lang["templates"], size_hint_x=0.25, halign="left")
-        tpl_row.add_widget(self.tpl_label)
+# ==========================================
+# 7. بناء الواجهة الرسومية الكاملة (CTk GUI)
+# ==========================================
+root = ctk.CTk()
+root.geometry("1150x850")
+root.minsize(850, 700) 
 
-        self.tpl_btn = MDFlatButton(text=self.lang["choose_template"], on_release=self.open_tpl_menu)
-        tpl_row.add_widget(self.tpl_btn)
+frame_top = ctk.CTkFrame(root, corner_radius=10)
+frame_top.pack(fill="x", padx=20, pady=20)
 
-        for text, cmd, color in [("Save", self.save_tpl, "#FD7E14"), ("Delete", self.del_tpl, "#DC3545")]:
-            b = MDFlatButton(text=text, md_bg_color=get_color_from_hex(color),
-                           text_color=(1,1,1,1), on_release=cmd)
-            setattr(self, f"tpl_{text.lower()}", b)
-            tpl_row.add_widget(b)
+row1 = ctk.CTkFrame(frame_top, fg_color="transparent")
+row1.pack(fill="x", padx=20, pady=(15, 5))
 
-        layout.add_widget(tpl_row)
+ctk.CTkButton(row1, text="🌙 / ☀️ Mode", width=100, border_width=2, fg_color="transparent", text_color=("black", "white"), font=("Segoe UI", 12, "bold"), command=toggle_theme).pack(side="right", padx=5)
 
-        # ── Equation Input ──
-        self.eq_label = MDLabel(text=self.lang["equation"], adaptive_height=True)
-        layout.add_widget(self.eq_label)
+lang_var = ctk.StringVar(value="English 🇬🇧")
+lang_menu = ctk.CTkOptionMenu(row1, variable=lang_var, values=list(languages.keys()), command=update_ui_language, width=130)
+lang_menu.pack(side="right", padx=5)
 
-        self.eq_input = MDTextField(hint_text="OUTPUT = EXPRESSION", multiline=False,
-                                    font_size=sp(18), mode="outlined",
-                                    on_text_validate=self.draw_blocks)
-        layout.add_widget(self.eq_input)
+btn_guide = ctk.CTkButton(row1, text="", width=120, fg_color="#6f42c1", hover_color="#59359a", font=("Segoe UI", 12, "bold"), command=open_guide_dialog)
+btn_guide.pack(side="right", padx=5)
 
-        # ── Keypad ──
-        keypad = MDBoxLayout(adaptive_height=True, spacing=dp(3))
-        keys = [("+", "#2D3748"), ("-", "#2D3748"), ("*", "#2D3748"), ("/", "#2D3748"),
-                ("**", "#2D3748"), ("=", "#4A5568"), ("(", "#4A5568"), (")", "#4A5568"),
-                ("and", "#0D6EFD"), ("or", "#0D6EFD"), ("not", "#DC3545")]
-        for txt, color in keys:
-            kb = MDFlatButton(text=txt, md_bg_color=get_color_from_hex(color),
-                             text_color=(1,1,1,1), font_size=sp(14),
-                             on_release=lambda x, v=txt: self.insert_op(v))
-            keypad.add_widget(kb)
-        layout.add_widget(keypad)
+btn_shot = ctk.CTkButton(row1, text="", width=120, fg_color="#00A896", hover_color="#028074", font=("Segoe UI", 12, "bold"), command=take_canvas_screenshot)
+btn_shot.pack(side="right", padx=5)
 
-        # ── Action Buttons ──
-        actions = MDBoxLayout(adaptive_height=True, spacing=dp(10))
-        for text, cmd, color in [("Draw Blocks", self.draw_blocks, "#198754"),
-                                 ("Preview ST", self.open_st_dialog, "#0D6EFD")]:
-            b = MDRaisedButton(text=text, md_bg_color=get_color_from_hex(color),
-                              text_color=(1,1,1,1), on_release=cmd)
-            setattr(self, f"btn_{text.split()[0].lower()}", b)
-            actions.add_widget(b)
-        layout.add_widget(actions)
+btn_pdf = ctk.CTkButton(row1, text="", width=120, fg_color="#E63946", hover_color="#D62828", font=("Segoe UI", 12, "bold"), command=export_to_pdf_report)
+btn_pdf.pack(side="right", padx=5)
 
-        # ── Canvas ──
-        sv = ScrollView(do_scroll_x=True, do_scroll_y=True)
-        self.canvas_widget = FBDCanvas()
-        sv.add_widget(self.canvas_widget)
-        layout.add_widget(sv, 1)
+# القوالب الهندسية
+row2 = ctk.CTkFrame(frame_top, fg_color="transparent")
+row2.pack(fill="x", padx=20, pady=5)
 
-        # ── Footer ──
-        footer = MDLabel(text=self.lang["lets_make"], adaptive_height=True,
-                         halign="center", font_style="Caption",
-                         theme_text_color="Hint")
-        layout.add_widget(footer)
+lbl_templates = ctk.CTkLabel(row2, text="", font=("Segoe UI", 14, "bold"))
+lbl_templates.pack(side="left", padx=(0, 10))
+combo_templates = ctk.CTkComboBox(row2, values=list(templates_db.keys()), width=380, font=("Segoe UI", 14), command=on_template_select)
+combo_templates.pack(side="left", padx=5)
+btn_save = ctk.CTkButton(row2, text="", width=80, fg_color="#FD7E14", hover_color="#E0690C", font=("Segoe UI", 12, "bold"), command=save_custom_template)
+btn_save.pack(side="left", padx=5)
+btn_delete = ctk.CTkButton(row2, text="", width=80, fg_color="#DC3545", hover_color="#BB2D3B", font=("Segoe UI", 12, "bold"), command=delete_custom_template)
+btn_delete.pack(side="left", padx=5)
 
-        main_screen.add_widget(layout)
-        self.root.add_widget(main_screen)
-        self.root.current = "main"
+# خانة إدخال المعادلة
+row3 = ctk.CTkFrame(frame_top, fg_color="transparent")
+row3.pack(fill="x", padx=20, pady=5)
 
-        # Build language menu
-        self._build_lang_menu()
-        self._build_tpl_menu()
+lbl_eq = ctk.CTkLabel(row3, text="", font=("Segoe UI", 16, "bold"))
+lbl_eq.pack(anchor="center", pady=(0, 2))
+entry_equation = ctk.CTkEntry(row3, font=("Consolas", 20), justify="center", height=50, border_width=2)
+entry_equation.pack(fill="x", expand=True, padx=20)
+root.bind('<Return>', draw_blocks)
 
-    # ─── i18n ───
-    def _build_lang_menu(self):
-        items = [{"text": k, "on_release": lambda v=k: self.set_lang(v)}
-                 for k in languages]
-        self.lang_menu = MDDropdownMenu(caller=self.lang_btn, items=items,
-                                        width_mult=3, position="bottom")
+# لوحة المفاتيح الهندسية
+row_keypad = ctk.CTkFrame(frame_top, fg_color="transparent")
+row_keypad.pack(pady=(2, 8))
 
-    def open_lang_menu(self, btn):
-        self.lang_menu.open()
+operators = [
+    ("+", "+"), ("-", "-"), ("*", "*"), ("/", "/"), ("**", "**"),
+    ("=", "="), ("(", "("), (")", ")"), ("and", "and"), ("or", "or")
+]
 
-    def set_lang(self, lang_name):
-        global current_lang
-        current_lang = lang_name
-        self.lang = languages[lang_name]
-        self.lang_btn.text = lang_name[:2].upper()
-        self.lang_menu.dismiss()
-        self.refresh_ui()
+for op_label, op_val in operators:
+    color = "#4A5568" if op_label in ["(", ")", "="] else ("#0D6EFD" if op_label in ["and", "or"] else "#2D3748")
+    btn_op = ctk.CTkButton(
+        row_keypad, text=op_label, width=55, height=32, 
+        fg_color=color, font=("Consolas", 14, "bold"),
+        command=lambda v=op_val: insert_operator(v)
+    )
+    btn_op.pack(side="left", padx=3)
 
-    def refresh_ui(self):
-        self.tpl_label.text = self.lang["templates"]
-        self.tpl_btn.text = self.lang["choose_template"]
-        self.eq_label.text = self.lang["equation"]
-        for name, attr in [("Guide", "btn_guide"), ("Screenshot", "btn_shot"), ("PDF", "btn_pdf")]:
-            getattr(self, attr).text = self.lang[f"btn_{name.lower()}"]
-        self.tpl_save.text = self.lang["btn_save"]
-        self.tpl_delete.text = self.lang["btn_delete"]
-        self.btn_draw.text = self.lang["btn_draw"]
-        self.btn_preview.text = self.lang["btn_preview"]
+# أزرار التنفيذ
+row4 = ctk.CTkFrame(frame_top, fg_color="transparent")
+row4.pack(pady=(0, 10))
 
-    # ─── Templates ───
-    def open_tpl_menu(self, btn):
-        items = [{"text": k, "on_release": lambda v=k: self.select_tpl(v)}
-                 for k in templates_db]
-        self.tpl_menu = MDDropdownMenu(caller=self.tpl_btn, items=items,
-                                       width_mult=4, position="bottom")
-        self.tpl_menu.open()
+btn_draw = ctk.CTkButton(row4, text="", height=40, font=("Segoe UI", 14, "bold"), fg_color="#198754", hover_color="#146c43", command=draw_blocks)
+btn_draw.pack(side="left", padx=10)
+btn_preview = ctk.CTkButton(row4, text="", height=40, font=("Segoe UI", 14, "bold"), fg_color="#0D6EFD", hover_color="#0B5ED7", command=open_data_type_dialog)
+btn_preview.pack(side="left", padx=10)
 
-    def select_tpl(self, name):
-        self.tpl_menu.dismiss()
-        self.tpl_btn.text = name
-        self.eq_input.text = templates_db[name]
-        self.draw_blocks()
+# مساحة العرض الرسومية المخططة
+canvas_frame = ctk.CTkFrame(root, corner_radius=15)
+canvas_frame.pack(fill="both", expand=True, padx=20, pady=(0, 5))
 
-    def save_tpl(self, btn):
-        if "=" not in self.eq_input.text:
-            self.snack(self.lang["err_invalid_eq"])
-            return
-        dialog = MDDialog(title="Save Template", text="Enter template name:",
-                         items=[MDTextField(hint_text="Name")],
-                         buttons=[MDFlatButton(text="Cancel", on_release=lambda x: dialog.dismiss()),
-                                  MDRaisedButton(text="Save", on_release=lambda x: self._do_save(dialog))])
-        dialog.open()
+h_scroll = tk.Scrollbar(canvas_frame, orient=tk.HORIZONTAL)
+h_scroll.pack(side=tk.BOTTOM, fill=tk.X)
+v_scroll = tk.Scrollbar(canvas_frame, orient=tk.VERTICAL)
+v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
-    def _do_save(self, dialog):
-        name = dialog.items[0].text.strip()
-        dialog.dismiss()
-        if not name: return
-        if name in templates_db:
-            import copy
-            c = copy.copy
-            conf = MDDialog(title="Confirm", text=self.lang["tpl_overwrite"].format(name=name),
-                           buttons=[MDFlatButton(text="No", on_release=lambda x: conf.dismiss()),
-                                    MDRaisedButton(text="Yes", on_release=lambda x: (conf.dismiss(),
-                                        self._final_save(name)))])
-            conf.open()
-        else:
-            self._final_save(name)
+canvas = tk.Canvas(canvas_frame, highlightthickness=0, yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
+canvas.pack(side=tk.LEFT, fill="both", expand=True)
+v_scroll.config(command=canvas.yview); h_scroll.config(command=canvas.xview)
 
-    def _final_save(self, name):
-        templates_db[name] = self.eq_input.text
-        if save_templates(templates_db):
-            self.snack(self.lang["tpl_saved"].format(name=name))
+# ==========================================
+# 8. شريط الدعاء السفلي الاحترافي ذو الخلفية الضبابية/المعتمة
+# ==========================================
+frame_dua = ctk.CTkFrame(root, height=45, corner_radius=0, fg_color=("#1A1F2C", "#111622"))
+frame_dua.pack(fill="x", side="bottom", pady=(5, 0))
 
-    def del_tpl(self, btn):
-        name = self.tpl_btn.text
-        if name in default_templates:
-            self.snack(self.lang["tpl_core_warn"])
-            return
-        if name not in templates_db: return
-        conf = MDDialog(title="Confirm", text=self.lang["tpl_delete_confirm"].format(name=name),
-                       buttons=[MDFlatButton(text="No", on_release=lambda x: conf.dismiss()),
-                                MDRaisedButton(text="Yes", on_release=lambda x:
-                                    (conf.dismiss(), self._do_del(name)))])
-        conf.open()
+lbl_dua = ctk.CTkLabel(
+    frame_dua, 
+    text="❤️ارجوا من كل شخص استعمل البرنامج ان يدعو لي ولكل من ساهم في تطويره بالرحمة والمغفرة  ", 
+    font=("Segoe UI", 14, "bold"), 
+    text_color="#E2E8F0",
+    justify="center"
+)
+lbl_dua.pack(expand=True, fill="both", pady=5)
 
-    def _do_del(self, name):
-        del templates_db[name]
-        if save_templates(templates_db):
-            self.tpl_btn.text = self.lang["choose_template"]
-            self.snack(self.lang["tpl_deleted"])
+update_ui_language()
+draw_grid(canvas, True)
 
-    # ─── Core ───
-    def insert_op(self, val):
-        self.eq_input.insert_text(f" {val} ")
-
-    def draw_blocks(self, *args):
-        eq = self.eq_input.text.strip()
-        if not eq:
-            self.snack(self.lang["warn_eq"])
-            return
-        blocks, error = process_equation(eq)
-        if error:
-            err_text = self.lang.get(error, error)
-            self.snack(err_text)
-            return
-        self.canvas_widget.draw(blocks, self.is_dark)
-
-    def toggle_theme(self, btn):
-        self.is_dark = not self.is_dark
-        self.theme_cls.theme_style = "Dark" if self.is_dark else "Light"
-        self.theme_btn.icon = "weather-night" if self.is_dark else "weather-sunny"
-        if self.eq_input.text.strip():
-            self.draw_blocks()
-
-    def snack(self, msg):
-        MDSnackbar(MDSnackbarSupportingText(text=msg), y=dp(24)).open()
-
-    # ─── Guide Dialog ───
-    def open_guide(self, btn):
-        lines = []
-        for name, desc in self.lang["blocks_info"].items():
-            lines.append(f"[b]{name}[/b]: {desc}")
-        dialog = MDDialog(title=self.lang["guide_title"],
-                         text="\n".join(lines),
-                         buttons=[MDFlatButton(text="Close", on_release=lambda x: dialog.dismiss())],
-                         size_hint_x=0.9)
-        dialog.open()
-
-    # ─── ST Preview ───
-    def open_st_dialog(self, btn):
-        eq = self.eq_input.text.strip()
-        if not eq:
-            self.snack(self.lang["warn_eq"])
-            return
-        try:
-            out_var, expression = eq.split("=", 1)
-            out_var = out_var.strip().upper()
-            expression = expression.strip()
-            from ast import walk, Name as AstName
-            inputs = set()
-            expr_norm = expression.replace(" AND ", " and ").replace(" OR ", " or ")
-            parsed = ast.parse(expr_norm, mode="eval")
-            for n in walk(parsed):
-                if isinstance(n, AstName):
-                    nm = n.id.upper()
-                    if nm not in ALLOWED_FUNCS and nm not in CONSTANTS:
-                        inputs.add(nm)
-        except Exception as e:
-            self.snack(f"Parse: {e}")
-            return
-
-        st_code = f"FUNCTION_BLOCK LogicBlock\n\nVAR_INPUT\n"
-        for v in sorted(inputs):
-            ty = "REAL" if not any(k in v for k in ["PUMP","RUN","CMD","FLAG"]) else "BOOL"
-            st_code += f"    {v} : {ty};\n"
-        st_code += f"END_VAR\n\nVAR_OUTPUT\n    {out_var} : REAL;\nEND_VAR\n\n"
-        st_code += f"{out_var} := {expression};\n\nEND_FUNCTION_BLOCK"
-
-        dialog = MDDialog(title="ST Code Preview", text=st_code,
-                         buttons=[MDFlatButton(text="Copy", on_release=lambda x:
-                             (self.copy_st(st_code), dialog.dismiss())),
-                                  MDFlatButton(text="Close", on_release=lambda x: dialog.dismiss())],
-                         size_hint_x=0.95)
-        dialog.open()
-
-    def copy_st(self, text):
-        from kivy.core.clipboard import Clipboard
-        Clipboard.copy(text)
-        self.snack(self.lang["st_copied"])
-
-    # ─── Screenshot ───
-    def take_shot(self, btn):
-        if not self.eq_input.text.strip():
-            self.snack(self.lang["warn_eq"])
-            return
-        self.draw_blocks()
-        Clock.schedule_once(lambda dt: self._do_shot(), 0.2)
-
-    def _do_shot(self):
-        name = "PLC_Capture.png"
-        try:
-            self.canvas_widget.export_to_png(name)
-            self.snack(self.lang["shot_success"].format(path=name))
-        except Exception as e:
-            self.snack(f"Error: {e}")
-
-    # ─── PDF ───
-    def make_pdf(self, btn):
-        if SimpleDocTemplate is None:
-            self.snack("reportlab not installed")
-            return
-        if not self.eq_input.text.strip():
-            self.snack(self.lang["warn_eq"])
-            return
-        self.draw_blocks()
-        Clock.schedule_once(lambda dt: self._do_pdf(), 0.3)
-
-    def _do_pdf(self):
-        name = "PLC_Report.pdf"
-        tmp_img = os.path.join(tempfile.gettempdir(), "fbd_android_tmp.png")
-        try:
-            self.canvas_widget.export_to_png(tmp_img)
-        except Exception as e:
-            self.snack(f"Image: {e}")
-            return
-        try:
-            from PIL import Image as PILImage
-            with PILImage.open(tmp_img) as im:
-                iw, ih = im.size
-            ratio = min(530.0 / iw, 700.0 / ih) if iw and ih else 0.3
-            dw, dh = iw * ratio, ih * ratio
-
-            doc = SimpleDocTemplate(name, pagesize=letter,
-                                    rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
-            styles = getSampleStyleSheet()
-            title = ParagraphStyle("T", parent=styles["Heading1"], fontName="Helvetica-Bold",
-                                   fontSize=18, spaceAfter=12, textColor="#0D6EFD")
-            meta = ParagraphStyle("M", parent=styles["Normal"], fontSize=10, spaceAfter=10)
-            eqs = ParagraphStyle("E", parent=styles["Code"], fontName="Courier-Bold",
-                                 fontSize=11, spaceAfter=15, textColor="#198754")
-
-            clean = self.eq_input.text.split("=")[0].strip().upper()[:30] if "=" in self.eq_input.text else "PLC"
-            story = [Paragraph(f"PLC Report: {clean}", title),
-                     Paragraph(f"Generated: {datetime.datetime.now():%Y-%m-%d %H:%M}", meta),
-                     Paragraph(f"<b>Equation:</b> {self.eq_input.text}", eqs),
-                     Paragraph("<b>FBD Diagram:</b>", styles["Normal"]),
-                     Spacer(1, 8),
-                     RLImage(tmp_img, width=dw, height=dh)]
-            doc.build(story)
-            self.snack(self.lang["pdf_success"].format(path=name))
-        except Exception as e:
-            self.snack(f"PDF: {e}")
-        finally:
-            try:
-                if os.path.exists(tmp_img): os.remove(tmp_img)
-            except Exception:
-                pass
-
-
-# ─── Entry Point ────────────────────────────────
-if __name__ == "__main__":
-    PLCStudioApp().run()
+root.mainloop()
