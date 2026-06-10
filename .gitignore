@@ -1,0 +1,11 @@
+# Buildozer
+bin/
+.buildozer/
+*.pyc
+__pycache__/
+*.log
+*.png
+*.pdf
+*.json
+.DS_Store
+thumbs.db
